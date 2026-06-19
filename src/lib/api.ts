@@ -1,14 +1,17 @@
 // ============================================================
-// Client HTTP minimal vers l'API FleetLink (fleetlink.mine2port.fr).
+// Client HTTP minimal vers l'API FleetLink (fleetlink.mine2port.eu).
 // Hors-ligne d'abord : aucune route n'est appelée tant que l'agent
 // n'a pas explicitement déclenché un login ou une sync — l'app
 // continue de fonctionner en local sans réseau.
+//
+// Lot 126.2 : host corrigé .fr -> .eu (le CDC projetait mine2port.fr,
+// mais le backend est déployé en prod LIVE sur mine2port.eu).
 // ============================================================
 
 import { Preferences } from '@capacitor/preferences';
 import type { Sheet } from './types';
 
-export const API_BASE = 'https://fleetlink.mine2port.fr/api/v1';
+export const API_BASE = 'https://fleetlink.mine2port.eu/api/v1';
 
 const TOKEN_KEY = 'fl_access_token';
 const REFRESH_KEY = 'fl_refresh_token';

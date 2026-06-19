@@ -264,7 +264,7 @@ export function AccountScreen() {
             <div className="lbl">Stockage utilisé</div>
             <div className="val">{archiveCount} fiche(s)</div>
           </div>
-          <div className="profile-row" onClick={() => window.open('https://fleetlink.mine2port.fr/legal', '_blank')} style={{ cursor: 'pointer' }}>
+          <div className="profile-row" onClick={() => window.open('https://fleetlink.mine2port.eu/legal', '_blank')} style={{ cursor: 'pointer' }}>
             <div className="lbl">CGU + Confidentialité</div>
             <div>→</div>
           </div>
