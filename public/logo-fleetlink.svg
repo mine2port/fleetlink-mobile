@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Logo FleetLink temporaire : "FL" stylisé dans un cercle vert pétrole + accent ambre -->
+  <defs>
+    <linearGradient id="fl-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F5E5E"/>
+      <stop offset="100%" stop-color="#0a4444"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="240" fill="url(#fl-grad)"/>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#B85C00" stroke-width="12"/>
+  <text x="256" y="310" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-size="200" font-weight="900"
+        fill="#FFFFFF" letter-spacing="-8">FL</text>
+  <text x="256" y="380" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-size="38" font-weight="700"
+        fill="#E8A857" letter-spacing="6">FLEETLINK</text>
+</svg>

@@ -1,0 +1,401 @@
+/* =============================================================
+   FleetLink Terrain — feuille de style globale
+   Pensé pour le terrain : gros boutons tactiles, lisible au soleil,
+   palette FleetLink (vert pétrole + accent ambre).
+   ============================================================= */
+
+:root {
+  --navy: #0F5E5E;        /* vert pétrole FleetLink */
+  --navy-dark: #0a4444;
+  --navy-soft: #0F7373;
+  --orange: #B85C00;      /* ambre FleetLink */
+  --orange-soft: #E8A857;
+  --bg: #F7F9F8;
+  --card: #FFFFFF;
+  --text: #0c1e1e;
+  --muted: #5b6b6b;
+  --good: #10B981;
+  --warn: #E8A23C;
+  --bad: #DC2626;
+  --border: #e5ecea;
+  --radius: 14px;
+  --shadow: 0 4px 14px rgba(15, 94, 94, 0.08);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 17px;
+  color: var(--text);
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ----- Barres en-tête / progression / pied ----- */
+.appbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: var(--navy); color: #fff;
+  box-shadow: var(--shadow);
+}
+.appbar .logo { width: 36px; height: 36px; border-radius: 8px; background: #fff; padding: 4px; }
+.appbar .titles { flex: 1; min-width: 0; }
+.appbar .titles h1 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.1; }
+.appbar .titles small { font-size: 11px; opacity: 0.8; }
+.appbar a.web-link {
+  color: #fff; background: rgba(255,255,255,0.15);
+  font-size: 12px; padding: 6px 10px; border-radius: 8px; text-decoration: none;
+  white-space: nowrap;
+}
+.appbar a.web-link:active { background: rgba(255,255,255,0.3); }
+
+.progress-bar { height: 6px; background: #e5ecea; }
+.progress-bar > div { height: 100%; background: var(--orange); transition: width 0.25s ease; }
+
+.screen {
+  padding: 16px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.screen h2 {
+  margin: 6px 0 14px;
+  font-size: 20px;
+  color: var(--navy);
+}
+
+/* ----- Cartes ----- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.section-card { padding: 12px; }
+.section-title {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--navy);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--navy);
+}
+
+/* ----- Champs ----- */
+label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--navy); }
+.fld {
+  display: block;
+  margin-bottom: 14px;
+}
+.fld input, .fld textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 17px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+}
+.fld input:focus, .fld textarea:focus {
+  outline: 2px solid var(--navy-soft); border-color: var(--navy-soft);
+}
+.fld.err input, .fld.err textarea { border-color: var(--bad); background: #FFF1EF; }
+
+/* ----- Item d'inspection ----- */
+.item {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(15,94,94,0.1);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.item.err-state { border-color: var(--bad); background: #FFF1EF; }
+.item-label { font-size: 15px; font-weight: 700; margin-bottom: 8px; line-height: 1.3; }
+.item-label .photo-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px; font-weight: 800;
+  padding: 2px 6px;
+  background: var(--orange); color: #fff;
+  border-radius: 6px;
+  vertical-align: middle;
+}
+.item-label .req { color: var(--bad); }
+
+/* ----- Boutons de réponse (gros, tactiles) ----- */
+.answers {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+}
+.answers.two { grid-template-columns: repeat(2, 1fr); }
+.answer-btn {
+  padding: 14px 8px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: #fff; color: var(--text);
+  font-size: 14px; font-weight: 700;
+  text-align: center; cursor: pointer;
+}
+.answer-btn.selected.bon { background: var(--good); color: #fff; border-color: var(--good); }
+.answer-btn.selected.moy { background: var(--warn); color: #fff; border-color: var(--warn); }
+.answer-btn.selected.mauv { background: var(--bad); color: #fff; border-color: var(--bad); }
+
+.obs { margin-top: 8px; }
+.obs input {
+  width: 100%; padding: 10px 12px;
+  border: 1px dashed var(--border); border-radius: 8px;
+  font-size: 14px; background: #fff;
+}
+
+/* ----- Photos ----- */
+.photo-area { margin-top: 10px; }
+.photo-need {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 12px; font-weight: 700;
+  color: var(--bad);
+}
+.thumbs {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 8px;
+}
+.thumb {
+  position: relative;
+  width: 80px; height: 80px;
+  border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb .x {
+  position: absolute; top: 2px; right: 2px;
+  background: rgba(0,0,0,0.55); color: #fff;
+  border-radius: 50%; width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; cursor: pointer;
+}
+
+/* ----- Boutons de navigation ----- */
+.nav-buttons {
+  display: flex; gap: 10px;
+  margin-top: 18px;
+}
+.btn {
+  flex: 1;
+  padding: 14px 18px;
+  font-size: 17px; font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  text-align: center;
+}
+.btn.primary { background: var(--navy); color: #fff; }
+.btn.secondary { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+.btn.accent { background: var(--orange); color: #fff; }
+.btn.danger { background: var(--bad); color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-photo {
+  display: inline-block;
+  background: var(--navy-soft); color: #fff;
+  padding: 12px 18px; border-radius: 10px; border: none;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+}
+
+/* ----- Accueil ----- */
+.home-hero {
+  background: linear-gradient(160deg, var(--navy), var(--navy-soft));
+  color: #fff;
+  padding: 26px 18px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  text-align: center;
+}
+.home-hero h2 { color: #fff; margin: 0 0 6px; font-size: 24px; }
+.home-hero p { margin: 4px 0 0; opacity: 0.92; font-size: 14px; }
+.home-cta-link {
+  display: inline-block;
+  margin-top: 14px;
+  background: rgba(255,255,255,0.18);
+  color: #fff; text-decoration: none;
+  padding: 8px 14px; border-radius: 8px;
+  font-weight: 600; font-size: 13px;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.saved-item {
+  display: flex; gap: 10px; align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  margin-bottom: 8px; background: #fff;
+}
+.saved-item .meta { flex: 1; min-width: 0; }
+.saved-item .meta b { display: block; font-size: 15px; }
+.saved-item .meta .mini { font-size: 12px; color: var(--muted); }
+.badge {
+  display: inline-block;
+  font-size: 10px; font-weight: 800;
+  padding: 2px 6px; border-radius: 4px;
+  color: #fff; vertical-align: middle;
+}
+.badge.depart { background: var(--navy); }
+.badge.retour { background: var(--orange); }
+.empty {
+  color: var(--muted);
+  padding: 20px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ----- Onglets liste EDL ----- */
+.tabs {
+  display: flex; gap: 6px;
+  margin: 0 0 12px;
+  border-bottom: 2px solid var(--border);
+}
+.tabs .tab {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  font-size: 14px; font-weight: 700;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+}
+.tabs .tab.active { color: var(--navy); border-bottom-color: var(--orange); }
+
+/* ----- Bilan boutons ----- */
+.bilan-row { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 480px) { .bilan-row { grid-template-columns: repeat(3, 1fr); } }
+.bilan-btn {
+  padding: 16px; border-radius: 10px; border: 2px solid var(--border);
+  background: #fff; cursor: pointer; font-weight: 700; font-size: 15px;
+}
+.bilan-btn.selected.bon { background: var(--good); color: #fff; border-color: var(--good); }
+.bilan-btn.selected.moy { background: var(--warn); color: #fff; border-color: var(--warn); }
+.bilan-btn.selected.mauv { background: var(--bad); color: #fff; border-color: var(--bad); }
+
+/* ----- Signature pad ----- */
+.signature-pad {
+  border: 2px dashed var(--navy);
+  border-radius: 10px;
+  background: #fff;
+  height: 200px;
+  touch-action: none;
+}
+.signature-pad.err { border-color: var(--bad); }
+
+/* ----- Toast ----- */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--navy-dark); color: #fff;
+  padding: 12px 18px; border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  font-size: 14px; font-weight: 600;
+  z-index: 9999;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.toast.show { opacity: 1; }
+
+/* ----- Récap / aperçu ----- */
+.recap-section { margin-top: 18px; }
+.recap-section h3 { margin: 0 0 8px; font-size: 15px; color: var(--navy); }
+.recap-row {
+  display: grid; gap: 6px;
+  grid-template-columns: 1fr 90px;
+  padding: 6px 4px;
+  border-bottom: 1px dotted var(--border);
+  font-size: 14px;
+}
+.recap-row .state {
+  font-weight: 700; text-align: center;
+  padding: 2px 6px; border-radius: 4px;
+}
+.recap-row .state.bon { background: var(--good); color: #fff; }
+.recap-row .state.moy { background: var(--warn); color: #fff; }
+.recap-row .state.mauv { background: var(--bad); color: #fff; }
+
+/* ----- Comparatif DÉPART vs RETOUR (EDL retour) ----- */
+.compare-section { margin: 16px 0 18px; }
+.compare-section h3 {
+  font-size: 14px; color: var(--navy);
+  margin: 0 0 8px;
+}
+.compare-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 80px 130px;
+  gap: 6px;
+  padding: 8px 4px;
+  border-bottom: 1px dotted var(--border);
+  font-size: 12.5px;
+  align-items: center;
+}
+.compare-row.head {
+  font-weight: 800; color: var(--muted);
+  text-transform: uppercase; font-size: 10.5px;
+}
+.compare-row .state {
+  font-weight: 700; text-align: center;
+  padding: 2px 6px; border-radius: 4px; font-size: 11px;
+}
+.compare-row .state.bon { background: var(--good); color: #fff; }
+.compare-row .state.moy { background: var(--warn); color: #fff; }
+.compare-row .state.mauv { background: var(--bad); color: #fff; }
+.compare-row .verdict {
+  display: flex; gap: 4px;
+}
+.compare-row .verdict button {
+  flex: 1;
+  font-size: 11px; font-weight: 700;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: #fff; padding: 4px 2px;
+  cursor: pointer;
+}
+.compare-row .verdict button.sel.ok { background: var(--good); color: #fff; border-color: var(--good); }
+.compare-row .verdict button.sel.diff { background: var(--warn); color: #fff; border-color: var(--warn); }
+.compare-row .verdict button.sel.dom { background: var(--bad); color: #fff; border-color: var(--bad); }
+
+/* ----- Login (couche cloud) ----- */
+.login-screen {
+  min-height: 100vh;
+  background: linear-gradient(160deg, var(--navy), var(--navy-dark));
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.login-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 22px;
+  max-width: 380px; width: 100%;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+}
+.login-card h2 { color: var(--navy); margin: 0 0 4px; text-align: center; }
+.login-card .login-sub { text-align: center; color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+.login-card .quick-zone {
+  margin-top: 18px; padding: 14px; background: #FFF7EB; border: 1px dashed var(--orange-soft); border-radius: 10px;
+  font-size: 13px;
+}
+.login-card .quick-zone h4 { margin: 0 0 8px; color: var(--orange); font-size: 13px; }
+.login-card .quick-acc-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; }
+.login-card .quick-acc-list button {
+  text-align: left; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; font-size: 13px; cursor: pointer;
+}
+
+/* ----- Sync queue badge (offline-first) ----- */
+.sync-badge {
+  display: inline-block;
+  background: var(--orange); color: #fff;
+  font-size: 11px; font-weight: 800;
+  padding: 3px 8px; border-radius: 999px;
+  margin-left: 8px;
+}
+
+/* Petits utilitaires */
+.muted { color: var(--muted); font-size: 13px; }
+.center { text-align: center; }
+.gap-12 > * + * { margin-top: 12px; }
