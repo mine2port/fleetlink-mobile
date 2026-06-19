@@ -12,12 +12,13 @@ import { AppBar } from './AppBar';
 import { ProgressBar } from './ProgressBar';
 import { NavButtons } from './NavButtons';
 import { PhotoPicker } from './PhotoPicker';
-import { ANSWER_TYPES, isBadAnswer, type Section } from '../data/sections';
+import { ANSWER_TYPES, answerClass, isBadAnswer, type Section } from '../data/sections';
 import { useSheet } from '../lib/store';
 import { Toast, useToast } from './Toast';
+import type { CompareVerdict } from '../lib/types';
 
 export function SectionScreen({ section }: { section: Section }) {
-  const { sheet, setItem, addItemPhoto, removeItemPhoto } = useSheet();
+  const { sheet, setItem, setCompareVerdict, addItemPhoto, removeItemPhoto } = useSheet();
   const answers = sheet.answers[section.id] || [];
   const [showErrors, setShowErrors] = useState(false);
   const { msg, push } = useToast();
@@ -53,6 +54,54 @@ export function SectionScreen({ section }: { section: Section }) {
       <ProgressBar step={section.id} />
       <main className="screen">
         <h2>{section.title}</h2>
+
+        {/* Bloc comparatif DÉPART vs RETOUR (uniquement pour EDL RETOUR) */}
+        {sheet.kind === 'RETOUR' && sheet.departSnapshot && (
+          <div className="card compare-section">
+            <h3>📋 Comparatif DÉPART vs RETOUR</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+              Pour chaque point, marque le verdict : <b>OK</b> identique · <b>Diff</b> changement non préjudiciable · <b>Dommage</b> dégradation à la charge du locataire.
+            </p>
+            <div className="compare-row head">
+              <div>Point de contrôle</div>
+              <div className="center">DÉPART</div>
+              <div className="center">RETOUR</div>
+              <div className="center">Verdict</div>
+            </div>
+            {section.items.map((it, idx) => {
+              const depAns = sheet.departSnapshot?.answers[section.id]?.[idx]?.state || '—';
+              const retAns = answers[idx]?.state || '—';
+              const verdict: CompareVerdict = (sheet.compare?.[section.id]?.[idx] || '') as CompareVerdict;
+              const depCls = answerClass(it.type, depAns);
+              const retCls = answerClass(it.type, retAns);
+              return (
+                <div key={`cmp-${idx}`} className="compare-row">
+                  <div>{it.label}</div>
+                  <div className="center"><span className={`state ${depCls}`}>{depAns}</span></div>
+                  <div className="center"><span className={`state ${retCls}`}>{retAns}</span></div>
+                  <div className="verdict">
+                    <button
+                      type="button"
+                      className={verdict === 'OK' ? 'sel ok' : ''}
+                      onClick={() => setCompareVerdict(section.id, idx, 'OK')}
+                    >OK</button>
+                    <button
+                      type="button"
+                      className={verdict === 'DIFFERENCE' ? 'sel diff' : ''}
+                      onClick={() => setCompareVerdict(section.id, idx, 'DIFFERENCE')}
+                    >Diff</button>
+                    <button
+                      type="button"
+                      className={verdict === 'DOMMAGE' ? 'sel dom' : ''}
+                      onClick={() => setCompareVerdict(section.id, idx, 'DOMMAGE')}
+                    >Dommage</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className="card section-card" style={{ background: section.color }}>
           {section.items.map((item, idx) => {
             const opts = ANSWER_TYPES[item.type] || ANSWER_TYPES.etat;

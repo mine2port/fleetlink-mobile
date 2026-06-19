@@ -1,226 +1,157 @@
-# Mine2Port — État de Lieu de Camion
+# FleetLink Mobile
 
-> Application Android (Capacitor + React + TypeScript) permettant de réaliser **l'état de lieu** d'un camion benne (HOWO T400 et autres modèles), de générer un PDF officiel cacheté, puis de le partager sur WhatsApp.
->
-> Cette app est **séparée** de la plateforme Mine2Port. Elle expose un lien direct vers `https://www.mine2port.eu` depuis l'écran d'accueil.
+**App terrain Android (Capacitor + React + TypeScript) pour les agents qui réalisent les états des lieux DÉPART et RETOUR sur les contrats de location FleetLink.**
 
----
+> Fork rebrandé de [Mine2Port - État de Lieu](../../Mine2Port%20-%20Etat%20de%20Lieu) (société sœur Mine2Port SAS) — décision actée dans le CDC FleetLink v1.1.
+> Plateforme web compagnon : [fleetlink.mine2port.fr](https://fleetlink.mine2port.fr).
 
-## 1. Concept
+## Ce que fait l'app
 
-L'app accompagne le contrôleur **écran par écran** sur le terrain :
+- **EDL DÉPART** : remise du camion au locataire (état initial qui sert de référence).
+- **EDL RETOUR** : restitution du camion, avec **comparatif visuel** point par point vs DÉPART, verdict OK / Diff / Dommage.
+- 7 sections d'inspection, ~60 points de contrôle (carrosserie, pneumatiques, moteur, freinage, éclairage, benne, outillage).
+- Galerie 12 photos guidées + photos additionnelles par item.
+- Signature tactile + génération PDF locale (jsPDF, hors-ligne).
+- Partage natif (WhatsApp / Email / Drive).
+- **Offline-first** : tout fonctionne sans réseau. La couche cloud (sync vers la plateforme web FleetLink) est optionnelle et non bloquante.
 
-1. **Accueil** : démarrer / reprendre / archives + lien plateforme Mine2Port
-2. **Identification** : entreprise **expéditrice**, entreprise **réceptrice**, camion
-3. → 7 écrans d'inspection (Carrosserie · Pneumatiques · Mécanique moteur · Freinage · Éclairage · Benne hydraulique · Outillage)
-4. **Photos** : 12 vues d'état des lieux obligatoires
-5. **Bilan & signature** : verdict APTE / RÉSERVES / IMMOBILISÉ + nom contrôleur + signature tactile
-6. **Récap & export PDF** : aperçu, partage WhatsApp, archivage local
+## Architecture
 
-Caractéristiques :
-- 🛜 **Hors-ligne** : tout fonctionne sans connexion (stockage local Capacitor Preferences).
-- 📸 **Appareil photo natif** : photos compressées (max 900 px, qualité 0.7).
-- 📝 **Signature tactile** au doigt.
-- 📄 **PDF** : en-tête bleu acier + logo Mine2Port + bandeau attestation + 2 blocs entreprises + identification camion + tableau couleurs par section + bloc bas avec **3 cadres signatures** (Expéditrice, Réceptrice, Cachet officiel) + page photos.
-- 📲 **Partage natif Android** (WhatsApp et autres).
-- 💾 **Archive locale** des 30 dernières fiches, renvoi possible.
+```
+src/
+├── App.tsx                  # Router HashRouter + auto-sync au démarrage
+├── lib/
+│   ├── types.ts             # Sheet (kind DEPART/RETOUR, compare, snapshot)
+│   ├── store.tsx            # Contexte React + persistance Capacitor Preferences
+│   ├── pdf.ts               # Génération PDF jsPDF (palette FleetLink + page comparative)
+│   ├── photos.ts            # Caméra native + compression
+│   ├── share.ts             # Partage natif Android
+│   ├── api.ts               # NEW Client HTTP FleetLink (auth, magic-login dev, upload)
+│   └── sync-queue.ts        # NEW File de sync hors-ligne -> flush au retour de réseau
+├── screens/
+│   ├── HomeScreen.tsx       # Accueil + 2 onglets À FAIRE / TERMINÉS + sync badge
+│   ├── LoginScreen.tsx      # NEW Login + accès rapide (mode test /dev/accounts)
+│   ├── IdentificationScreen.tsx  # Sélecteur kind + sociétés + camion
+│   ├── PhotosScreen.tsx     # 12 photos obligatoires
+│   ├── BilanScreen.tsx      # Bilan + signature
+│   └── RecapScreen.tsx      # Récap + export PDF + enqueue upload cloud
+├── components/
+│   ├── SectionScreen.tsx    # Écran générique avec bloc comparatif RETOUR
+│   ├── SignaturePad.tsx     # Canvas tactile
+│   └── ...
+├── data/sections.ts         # 7 sections × ~60 points (référence métier)
+└── assets/
+    ├── branding.ts          # Rasterise SVG -> PNG dataURL pour le PDF
+    ├── logo-fleetlink.svg   # Logo temporaire (à remplacer par charte officielle)
+    └── cachet-fleetlink.svg # Cachet temporaire
+```
 
----
+## Palette FleetLink
 
-## 2. Stack
-
-| Couche | Choix |
+| Rôle | Couleur |
 |---|---|
-| UI | React 18 + TypeScript |
-| Build | Vite |
-| Mobile | Capacitor 6 (WebView Android) |
-| Plugins natifs | `@capacitor/camera`, `@capacitor/share`, `@capacitor/filesystem`, `@capacitor/preferences`, `@capacitor/app`, `@capacitor/status-bar` |
-| PDF | `jsPDF` (embarqué dans l'APK, marche hors-ligne) |
+| Principal | `#0F5E5E` vert pétrole |
+| Principal foncé | `#0a4444` |
+| Accent | `#B85C00` ambre |
+| Accent clair | `#E8A857` |
+| Success / Warn / Error | `#10B981` / `#E8A23C` / `#DC2626` |
 
-**App ID** : `com.mine2port.etatdelieu` · **Nom** : `Mine2Port - État de Lieu`
+## Couche cloud (optionnelle)
 
----
+L'app reste pleinement fonctionnelle hors-ligne. Quand l'agent se connecte :
 
-## 3. Prérequis
+1. **Login** : `POST /api/v1/auth/login` → tokens stockés dans Capacitor Preferences.
+2. **Mode test** : si l'API expose `/api/v1/dev/accounts`, le panneau « Accès rapide » s'affiche → magic-login en 1 clic.
+3. **Upload** : à chaque fiche finalisée, un job est mis en file (`sync-queue`). `flushQueue()` est appelé automatiquement au retour de connexion (`window.online`).
+4. **Statuts par fiche** : `cloudStatus` peut être `PENDING`, `SENT` ou `ERROR` (badge dans la liste).
 
-| Outil | Version recommandée | Pourquoi |
-|---|---|---|
-| **Node.js** | 18 ou 20 (LTS) | Lancer Vite + Capacitor CLI |
-| **Java JDK** | 17 | Compiler le projet Android |
-| **Android Studio** | dernière stable | Builder l'APK + SDK + Gradle |
-| (Android SDK) | API 33+ | Géré par Android Studio |
+Endpoints attendus côté API FleetLink (à exposer par les agents back FleetLink) :
+- `POST /auth/login` `{email, password}` → `{accessToken, refreshToken, user}`
+- `POST /auth/refresh` `{refreshToken}` → `{accessToken, refreshToken?}`
+- `GET /dev/accounts` → `[{email, role, fullName}]` (MODE TEST)
+- `POST /dev/magic-login` `{email}` → `{accessToken, refreshToken, user}` (MODE TEST)
+- `GET /me/sheets/assigned` → `[AssignedSheet]`
+- `POST /me/sheets` (multipart : `payload` JSON + `pdf`) → `{id, pdfUrl}`
 
-Installation rapide (Windows) :
-- Node : https://nodejs.org (LTS)
-- JDK 17 : https://adoptium.net/ (Temurin)
-- Android Studio : https://developer.android.com/studio (cocher "Android SDK Platform" + "Android SDK Build-Tools" + "Android SDK Platform-Tools" pendant l'install)
+## Workflow EDL RETOUR
 
----
+1. L'agent termine un EDL DÉPART → archivé localement.
+2. Sur l'écran d'accueil, onglet **À faire**, section « ↩ Faire un EDL RETOUR » → choisit l'EDL DÉPART correspondant.
+3. Le store appelle `startReturnFromDepart(departSheet)` qui pré-remplit :
+   - Sociétés (propriétaire + locataire)
+   - Camion (matricule, parc, chauffeur)
+   - `contractId` et `relatedSheetId`
+   - `departSnapshot` (snapshot des réponses du DÉPART)
+   - `compare` initialisé vide pour chaque item.
+4. Sur chaque section, une zone **comparatif** apparaît au-dessus de la liste d'items : verdict OK / Diff / Dommage par point.
+5. Lors de l'export PDF, une **page comparative dédiée** liste uniquement les différences et dommages.
 
-## 4. Premier lancement (mode développeur / navigateur)
+## Identité Android
 
-Pour tester rapidement la logique dans le navigateur, **avant même de toucher à Android** :
+| Param | Valeur |
+|---|---|
+| `appId` | `com.fleetlink.mobile` |
+| `appName` | `FleetLink Terrain` |
+| Splash | `#0F5E5E` vert pétrole |
+| Theme color | `#0F5E5E` |
+| Package Java | `com.fleetlink.mobile` |
+
+## Build
+
+### Pré-requis
+
+- Node 20+, npm 10+
+- Android Studio (Giraffe ou plus récent) + SDK 34
+- JDK 17
+
+### Dev
 
 ```bash
 npm install
-npm run dev
+npm run dev                # vite preview navigateur
 ```
 
-Ouvre `http://localhost:5173` dans Chrome. La capture photo et le partage tomberont en mode fallback navigateur (input file + téléchargement PDF), mais TOUT le reste fonctionne.
-
----
-
-## 5. Builder l'APK Android (méthode Android Studio — recommandée)
-
-### 5.1 Initialisation du dossier Android (à faire une seule fois)
+### Build production + APK debug
 
 ```bash
 npm install
-npm run build               # génère dist/
-npm run android:init        # crée le dossier android/ (Capacitor scaffold)
-npm run android:sync        # copie dist/ vers android/ + sync plugins
+npm run build              # tsc + vite build -> dist/
+npx cap sync android       # copie dist/ -> android/app/src/main/assets/public/
+cd android && ./gradlew assembleDebug
+# APK : android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-> Si `android:init` demande quelque chose : laisse les valeurs par défaut.
+ATTENTION : si Gradle plante à cause du sync OneDrive (espaces dans le chemin ou fichiers verrouillés), copie le projet dans `C:\src\fleetlink-mobile\` pour builder, comme on l'a fait pour la base Mine2Port avec `C:\src\m2p-eedl\`.
 
-### 5.2 Ouvrir le projet dans Android Studio
+### Install sur device
 
 ```bash
-npm run android:open
+adb -s <device-id> install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s <device-id> shell monkey -p com.fleetlink.mobile -c android.intent.category.LAUNCHER 1
 ```
 
-Android Studio s'ouvre sur le dossier `android/`. À la première ouverture, Gradle télécharge ses dépendances (5-15 min).
+## Roadmap
 
-### 5.3 Générer l'APK de **test**
+### V0.1 (ce fork)
+- Fork rebrandé
+- Workflow DÉPART/RETOUR
+- Couche cloud (api.ts + sync-queue.ts)
+- Écran login + quick-access mode test
 
-Dans Android Studio :
-- Menu **Build** → **Build Bundle(s) / APK(s)** → **Build APK(s)**
-- Quand Gradle a fini : clic sur **"locate"** dans la notification (en bas à droite)
-- L'APK est dans : `android/app/build/outputs/apk/debug/app-debug.apk`
+### V0.2 (à venir)
+- Synchro initiale des EDL assignés (`/me/sheets/assigned`) sur l'écran d'accueil
+- Logo + cachet officiels FleetLink (après immatriculation société)
+- Réception push FCM pour nouvelles assignations
+- Signature électronique du locataire (canvas tactile sur écran déjà en place, mais à exposer dans le workflow propriétaire / locataire)
 
-Copie ce `.apk` sur le téléphone (USB ou WhatsApp/email/Drive) et installe-le. Sur Android, autoriser "Installer depuis des sources inconnues" pour la première installation.
+## Liens
 
-### 5.4 Générer un APK signé (pour distribution **terrain** ou Play Store)
-
-Dans Android Studio : **Build** → **Generate Signed Bundle / APK** → **APK** → suivre l'assistant (créer une keystore au passage, à conserver précieusement).
-
-> Si tu veux publier sur le Play Store, choisis **Android App Bundle (.aab)** au lieu de APK.
-
----
-
-## 6. Builder l'APK **sans Android Studio** (ligne de commande)
-
-Si Android Studio est installé (donc SDK présent) mais que tu préfères la ligne de commande :
-
-```bash
-npm install
-npm run build
-npx cap add android       # une seule fois
-npx cap sync android
-cd android
-./gradlew assembleDebug   # Linux/Mac
-gradlew.bat assembleDebug # Windows
-```
-
-APK généré : `android/app/build/outputs/apk/debug/app-debug.apk`.
+- Plateforme web : [fleetlink.mine2port.fr](https://fleetlink.mine2port.fr)
+- CDC FleetLink v1.2 : `01-cahier-des-charges/CDC_FleetLink_v1.2.docx`
+- Repo parent (référence) : `../../Mine2Port - Etat de Lieu/`
+- Société sœur : Mine2Port SAS
+- Repo GitHub (à créer) : `github.com/mine2port/fleetlink-mobile`
 
 ---
 
-## 7. Lancer directement sur un téléphone branché en USB
-
-```bash
-# Téléphone connecté en USB avec "Débogage USB" activé
-npm run android:run
-```
-
-Capacitor compile, installe et lance l'app. C'est le mode itératif le plus rapide.
-
----
-
-## 8. Mettre à jour le contenu (sections, photos, branding)
-
-| Tu veux modifier… | Fichier |
-|---|---|
-| Liste des points de contrôle | `src/data/sections.ts` |
-| Types de réponses (Bon/Moyen/Mauvais…) | `src/data/sections.ts` (objet `ANSWER_TYPES`) |
-| Photos obligatoires de la galerie | `src/data/sections.ts` (tableau `GALLERY_PHOTOS`) |
-| Logo Mine2Port (écran + PDF) | `public/logo-mine2port.svg` |
-| Cachet officiel Mine2Port (PDF) | `public/cachet-mine2port.svg` |
-| Mise en page PDF | `src/lib/pdf.ts` |
-| Couleurs / palette UI | `src/styles.css` (variables `--navy`, `--orange`, etc.) |
-| Lien vers la plateforme | `src/components/AppBar.tsx` (constante `MINE2PORT_WEB_URL`) |
-
-Après modif : `npm run build` puis `npm run android:sync` pour pousser dans le projet Android.
-
----
-
-## 9. Icônes Android & splash screen
-
-Capacitor crée des icônes par défaut. Pour mettre celles de Mine2Port :
-
-1. Génère les icônes via https://icon.kitchen ou Android Studio (Right-click sur `app/res` → **New → Image Asset** → Image = `public/logo-mine2port.svg`).
-2. Le splash screen est défini dans `capacitor.config.ts` (couleur navy `#1F4E79`). Pour personnaliser, ajoute `@capacitor/splash-screen` et un PNG dans `android/app/src/main/res/drawable/`.
-
-Le dossier `android-assets/` est prévu pour recevoir tes futurs PNG d'icônes.
-
----
-
-## 10. Évolutions prévues
-
-L'architecture est conçue pour, plus tard :
-- **Synchroniser** les fiches dans la plateforme Mine2Port (`POST /api/v1/me/etat-de-lieu`). Le modèle `Sheet` (voir `src/lib/types.ts`) est sérialisable en JSON, déjà prêt pour ça.
-- **Envoi WhatsApp automatique** via API WhatsApp Business.
-- **Multi-modèles** de camions (la structure `SECTIONS` est un simple tableau remplaçable).
-- **Rôles** (contrôleur / responsable).
-
----
-
-## 11. Structure du projet
-
-```
-Mine2Port - Etat de Lieu/
-├── public/
-│   ├── logo-mine2port.svg
-│   └── cachet-mine2port.svg
-├── src/
-│   ├── data/sections.ts           ← logique métier (sections, types réponses)
-│   ├── lib/
-│   │   ├── types.ts               ← modèles (Sheet, Company…)
-│   │   ├── store.tsx              ← état global + sauvegarde locale
-│   │   ├── photos.ts              ← capture + compression
-│   │   ├── pdf.ts                 ← génération PDF jsPDF
-│   │   └── share.ts               ← partage natif Android
-│   ├── assets/branding.ts         ← rastérisation logo/cachet pour le PDF
-│   ├── components/                ← AppBar, ProgressBar, NavButtons, PhotoPicker, SignaturePad, SectionScreen, Toast
-│   ├── screens/                   ← HomeScreen, IdentificationScreen, PhotosScreen, BilanScreen, RecapScreen
-│   ├── App.tsx                    ← router (HashRouter, 12 routes)
-│   ├── main.tsx                   ← point d'entrée React
-│   └── styles.css                 ← CSS global Mine2Port (terrain : gros boutons)
-├── docs/proto-reference.html       ← prototype web d'origine (source de vérité)
-├── android-assets/                 ← (à venir) icônes/splash personnalisés
-├── capacitor.config.ts
-├── vite.config.ts
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
----
-
-## 12. Aide / dépannage rapide
-
-| Symptôme | Solution |
-|---|---|
-| `npm run android:init` échoue | Vérifier que `npm run build` est passé (le dossier `dist/` doit exister) |
-| L'appareil photo ne s'ouvre pas | Permissions Android : Paramètres → App → Mine2Port → Autorisations → Caméra |
-| PDF sans logo | Le navigateur a bloqué le `fetch('/logo-mine2port.svg')`. Sur APK ça marche : c'est juste du dev local. |
-| WhatsApp ne s'ouvre pas | Le partage natif propose toutes les apps de partage : c'est l'utilisateur qui choisit WhatsApp. Sur le Play Store, le partage par défaut Android est utilisé. |
-| Brouillon perdu | Auto-sauvegardé à chaque modif. Si l'utilisateur a tapé "Nouvelle inspection" → vidé volontairement. |
-
----
-
-## 13. Licence & crédits
-
-Code commenté en français. Couleurs, branding : Mine2Port SAS — Conakry, Guinée.
-
-> Prototype web d'origine : `controle-camion-howo.html` (dans `docs/proto-reference.html`).
+*Fork initial réalisé le 19/06/2026 par Syrine (agent Mobile FleetLink) sous charte Mine2Port v3.*

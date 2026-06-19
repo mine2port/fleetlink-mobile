@@ -13,6 +13,8 @@ import { Toast, useToast } from '../components/Toast';
 import { SECTIONS, GALLERY_PHOTOS, answerClass, isBadAnswer } from '../data/sections';
 import { buildPdf } from '../lib/pdf';
 import { sharePdf } from '../lib/share';
+import { enqueueUpload, flushQueue } from '../lib/sync-queue';
+import { isLoggedIn } from '../lib/api';
 
 export function RecapScreen() {
   const { sheet, archiveSheet, newSheet } = useSheet();
@@ -29,11 +31,11 @@ export function RecapScreen() {
   // Validation globale (tout ce que le PDF doit avoir).
   function validateAll(): string[] {
     const errors: string[] = [];
-    // Entreprises
-    if (!sheet.sender.name) errors.push('Entreprise expéditrice manquante');
-    if (!sheet.sender.representative) errors.push('Représentant expéditrice manquant');
-    if (!sheet.receiver.name) errors.push('Entreprise réceptrice manquante');
-    if (!sheet.receiver.representative) errors.push('Représentant réceptrice manquant');
+    // Sociétés
+    if (!sheet.sender.name) errors.push('Société propriétaire manquante');
+    if (!sheet.sender.representative) errors.push('Représentant propriétaire manquant');
+    if (!sheet.receiver.name) errors.push('Société locataire manquante');
+    if (!sheet.receiver.representative) errors.push('Représentant locataire manquant');
     // Identification camion
     (['matricule', 'parc', 'km', 'hmot', 'date', 'chauffeur'] as const).forEach((k) => {
       if (!sheet[k]) errors.push(`Champ "${k}" manquant`);
@@ -67,10 +69,17 @@ export function RecapScreen() {
     }
     setBusy(true);
     try {
-      await archiveSheet();
+      const archived = await archiveSheet();
       const { blob, filename, dataUrl } = await buildPdf(sheet);
       await sharePdf(blob, filename, dataUrl);
-      push('✅ PDF généré et partagé');
+      // Couche cloud : si connecté, enqueue + tentative immédiate (best effort)
+      if (await isLoggedIn()) {
+        await enqueueUpload(archived);
+        flushQueue().catch(() => {});
+        push('✅ PDF partagé · upload cloud en cours');
+      } else {
+        push('✅ PDF généré et partagé');
+      }
     } catch (e) {
       console.error(e);
       push('⛔ Erreur lors de la génération PDF');
@@ -81,8 +90,16 @@ export function RecapScreen() {
 
   const doSaveOnly = async () => {
     setBusy(true);
-    try { await archiveSheet(); push('💾 Fiche enregistrée dans l\'archive'); }
-    catch { push('⛔ Échec de l\'enregistrement'); }
+    try {
+      const archived = await archiveSheet();
+      if (await isLoggedIn()) {
+        await enqueueUpload(archived);
+        flushQueue().catch(() => {});
+        push('💾 Archivée · upload cloud en cours');
+      } else {
+        push('💾 Fiche enregistrée dans l\'archive');
+      }
+    } catch { push('⛔ Échec de l\'enregistrement'); }
     finally { setBusy(false); }
   };
 
@@ -115,9 +132,9 @@ export function RecapScreen() {
         <h2>Récapitulatif</h2>
 
         <div className="card">
-          <div className="section-title">📦 Synthèse</div>
-          <div className="recap-row"><span><b>Expéditrice</b></span><span className="muted center">{sheet.sender.name || '—'}</span></div>
-          <div className="recap-row"><span><b>Réceptrice</b></span><span className="muted center">{sheet.receiver.name || '—'}</span></div>
+          <div className="section-title">📦 Synthèse <span className={`badge ${sheet.kind === 'RETOUR' ? 'retour' : 'depart'}`}>{sheet.kind === 'RETOUR' ? 'RETOUR' : 'DÉPART'}</span></div>
+          <div className="recap-row"><span><b>Propriétaire</b></span><span className="muted center">{sheet.sender.name || '—'}</span></div>
+          <div className="recap-row"><span><b>Locataire</b></span><span className="muted center">{sheet.receiver.name || '—'}</span></div>
           <div className="recap-row"><span><b>Camion</b></span><span className="muted center">{sheet.matricule || '—'}</span></div>
           <div className="recap-row"><span><b>Chauffeur</b></span><span className="muted center">{sheet.chauffeur || '—'}</span></div>
           <div className="recap-row"><span><b>Bilan</b></span><span className={`state ${sheet.bilan === 'APTE AU SERVICE' ? 'bon' : sheet.bilan === 'IMMOBILISÉ' ? 'mauv' : sheet.bilan ? 'moy' : ''}`}>{sheet.bilan || 'À FAIRE'}</span></div>

@@ -73,7 +73,7 @@ export function BilanScreen() {
           <SignaturePad value={sheet.signature} onChange={setSignature} error={showErrors && !sheet.signature} />
           <p className="muted" style={{ marginTop: 6 }}>
             Signez avec votre doigt directement sur l'écran. Cette signature s'imprimera dans le PDF
-            sur le cadre "Réceptrice".
+            sur le cadre "Locataire".
           </p>
         </div>
 

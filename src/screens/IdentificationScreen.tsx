@@ -1,8 +1,9 @@
-// Écran 1 — Identification : entreprises (expéditrice / réceptrice) + camion.
-// L'état de lieu se fait CONTRADICTOIREMENT entre 2 entreprises :
-//   - L'entreprise qui REMET le camion (expéditrice)
-//   - L'entreprise qui REÇOIT et contrôle le camion (réceptrice)
+// Écran 1 — Identification : sociétés (propriétaire / locataire) + camion.
+// L'état des lieux FleetLink se fait CONTRADICTOIREMENT entre 2 sociétés :
+//   - Le PROPRIÉTAIRE / BAILLEUR (loue le camion via FleetLink)
+//   - Le LOCATAIRE / PRENEUR (reçoit, contrôle ou restitue le camion)
 // Ces 2 blocs apparaissent en haut du PDF + dans le bloc signatures en bas du PDF.
+// Sélecteur kind (DÉPART/RETOUR) en tête : configure le sens de l'EDL.
 
 import { useState } from 'react';
 import { AppBar } from '../components/AppBar';
@@ -28,16 +29,18 @@ const TRUCK_FIELDS: Field[] = [
 ];
 
 export function IdentificationScreen() {
-  const { sheet, setIdent, setCompany } = useSheet();
+  const { sheet, setIdent, setCompany, setKind } = useSheet();
   const [showErrors, setShowErrors] = useState(false);
   const { msg, push } = useToast();
 
+  const isRetour = sheet.kind === 'RETOUR';
+
   const validate = (): boolean => {
     const missingCo: string[] = [];
-    if (!sheet.sender.name) missingCo.push('Entreprise expéditrice');
-    if (!sheet.sender.representative) missingCo.push('Représentant expéditrice');
-    if (!sheet.receiver.name) missingCo.push('Entreprise réceptrice');
-    if (!sheet.receiver.representative) missingCo.push('Représentant réceptrice');
+    if (!sheet.sender.name) missingCo.push('Société propriétaire');
+    if (!sheet.sender.representative) missingCo.push('Représentant propriétaire');
+    if (!sheet.receiver.name) missingCo.push('Société locataire');
+    if (!sheet.receiver.representative) missingCo.push('Représentant locataire');
     const missingTruck = TRUCK_FIELDS.filter((f) => !sheet[f.key]).map((f) => f.label);
     const all = [...missingCo, ...missingTruck];
     if (all.length) {
@@ -55,10 +58,36 @@ export function IdentificationScreen() {
       <main className="screen">
         <h2>Identification</h2>
 
-        {/* --- Bloc Parties : Entreprise expéditrice --- */}
+        {/* --- Sélecteur kind (DÉPART / RETOUR) --- */}
+        <div className="card">
+          <div className="section-title">📋 Sens de l'état des lieux</div>
+          <div className="answers two" style={{ marginTop: 4 }}>
+            <button
+              type="button"
+              className={`answer-btn ${!isRetour ? 'selected bon' : ''}`}
+              onClick={() => setKind('DEPART')}
+            >
+              🚛 DÉPART<br/><small style={{ fontSize: 11, fontWeight: 500 }}>remise au locataire</small>
+            </button>
+            <button
+              type="button"
+              className={`answer-btn ${isRetour ? 'selected moy' : ''}`}
+              onClick={() => setKind('RETOUR')}
+            >
+              ↩️ RETOUR<br/><small style={{ fontSize: 11, fontWeight: 500 }}>restitution au propriétaire</small>
+            </button>
+          </div>
+          {isRetour && sheet.departSnapshot && (
+            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+              Comparé à l'EDL DÉPART du {sheet.departSnapshot.date || '—'} · km départ : <b>{sheet.departSnapshot.km || '—'}</b>
+            </div>
+          )}
+        </div>
+
+        {/* --- Bloc Parties : Société propriétaire / bailleur --- */}
         <div className="card">
           <div className="section-title">
-            🏢 Entreprise EXPÉDITRICE <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 13 }}>(qui remet le camion)</span>
+            🏢 PROPRIÉTAIRE / BAILLEUR <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 13 }}>(loue le camion)</span>
           </div>
           <div className={`fld ${showErrors && !sheet.sender.name ? 'err' : ''}`}>
             <label>Raison sociale *</label>
@@ -69,11 +98,11 @@ export function IdentificationScreen() {
             />
           </div>
           <div className={`fld ${showErrors && !sheet.sender.representative ? 'err' : ''}`}>
-            <label>Représentant qui remet *</label>
+            <label>Représentant qui {isRetour ? 'récupère' : 'remet'} *</label>
             <input
               value={sheet.sender.representative}
               onChange={(e) => setCompany('sender', 'representative', e.target.value)}
-              placeholder="Nom + prénom de la personne qui remet le camion"
+              placeholder={isRetour ? 'Personne qui réceptionne le camion en restitution' : 'Personne qui remet le camion au locataire'}
             />
           </div>
           <div className="fld">
@@ -86,7 +115,7 @@ export function IdentificationScreen() {
             />
           </div>
           <div className="fld">
-            <label>Lieu de remise</label>
+            <label>Lieu {isRetour ? 'de restitution' : 'de remise'}</label>
             <input
               value={sheet.sender.place}
               onChange={(e) => setCompany('sender', 'place', e.target.value)}
@@ -95,25 +124,25 @@ export function IdentificationScreen() {
           </div>
         </div>
 
-        {/* --- Bloc Parties : Entreprise réceptrice --- */}
+        {/* --- Bloc Parties : Société locataire / preneur --- */}
         <div className="card">
           <div className="section-title">
-            🏛️ Entreprise RÉCEPTRICE <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 13 }}>(qui reçoit et contrôle)</span>
+            🏛️ LOCATAIRE / PRENEUR <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 13 }}>({isRetour ? 'qui restitue' : 'qui reçoit et contrôle'})</span>
           </div>
           <div className={`fld ${showErrors && !sheet.receiver.name ? 'err' : ''}`}>
             <label>Raison sociale *</label>
             <input
               value={sheet.receiver.name}
               onChange={(e) => setCompany('receiver', 'name', e.target.value)}
-              placeholder="Ex : FleetLink SAS"
+              placeholder="Ex : SOTRAMINE SARL"
             />
           </div>
           <div className={`fld ${showErrors && !sheet.receiver.representative ? 'err' : ''}`}>
-            <label>Représentant qui reçoit *</label>
+            <label>Représentant qui {isRetour ? 'restitue' : 'reçoit'} *</label>
             <input
               value={sheet.receiver.representative}
               onChange={(e) => setCompany('receiver', 'representative', e.target.value)}
-              placeholder="Nom + prénom du contrôleur"
+              placeholder="Nom + prénom du locataire"
             />
           </div>
           <div className="fld">
@@ -126,11 +155,11 @@ export function IdentificationScreen() {
             />
           </div>
           <div className="fld">
-            <label>Lieu de réception</label>
+            <label>Lieu {isRetour ? 'de restitution' : 'de réception'}</label>
             <input
               value={sheet.receiver.place}
               onChange={(e) => setCompany('receiver', 'place', e.target.value)}
-              placeholder="Ex : Parc FleetLink — Port autonome"
+              placeholder="Ex : Chantier / Atelier / Port"
             />
           </div>
         </div>
