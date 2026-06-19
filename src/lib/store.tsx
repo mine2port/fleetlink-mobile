@@ -1,14 +1,15 @@
 // ============================================================
 // Contexte React = état global d'une fiche d'inspection en cours
 // + sauvegarde locale (Capacitor Preferences si dispo, sinon localStorage).
+// FleetLink : prise en compte du kind (DEPART/RETOUR) + champ contractId.
 // ============================================================
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { SECTIONS, GALLERY_PHOTOS } from '../data/sections';
-import type { ItemAnswer, Sheet } from './types';
+import type { CompareVerdict, ItemAnswer, Sheet, SheetDepartSnapshot } from './types';
 
 // Crée une fiche vierge avec les bons tableaux pré-remplis.
-function emptySheet(): Sheet {
+function emptySheet(kind: Sheet['kind'] = 'DEPART'): Sheet {
   const answers: Record<string, ItemAnswer[]> = {};
   for (const sec of SECTIONS) {
     answers[sec.id] = sec.items.map(() => ({ state: '', obs: '', photos: [] }));
@@ -16,6 +17,7 @@ function emptySheet(): Sheet {
   const emptyCo = { name: '', representative: '', phone: '', place: '' };
   return {
     id: 0,
+    kind,
     sender: { ...emptyCo },
     receiver: { ...emptyCo },
     matricule: '',
@@ -34,8 +36,10 @@ function emptySheet(): Sheet {
   };
 }
 
-const DRAFT_KEY = 'm2p_eedl_draft';
-const ARCHIVE_KEY = 'm2p_eedl_sheets';
+// Clés de stockage FleetLink (préfixées fl_ pour ne pas collisionner avec un éventuel
+// vieux stockage Mine2Port si l'app a été installée par-dessus).
+const DRAFT_KEY = 'fl_eedl_draft';
+const ARCHIVE_KEY = 'fl_eedl_sheets';
 
 // Tentative d'utiliser Capacitor Preferences si présent (mobile). Fallback localStorage.
 async function readKey(key: string): Promise<string | null> {
@@ -61,9 +65,11 @@ async function writeKey(key: string, value: string): Promise<void> {
 
 type Ctx = {
   sheet: Sheet;
+  setKind: (k: Sheet['kind']) => void;
   setIdent: (field: keyof Sheet, value: string) => void;
   setCompany: (side: 'sender' | 'receiver', field: keyof Sheet['sender'], value: string) => void;
   setItem: (sectionId: string, idx: number, patch: Partial<ItemAnswer>) => void;
+  setCompareVerdict: (sectionId: string, idx: number, verdict: CompareVerdict) => void;
   addItemPhoto: (sectionId: string, idx: number, dataUrl: string) => void;
   removeItemPhoto: (sectionId: string, idx: number, photoIdx: number) => void;
   addGalleryPhoto: (galleryIdx: number, dataUrl: string) => void;
@@ -73,14 +79,28 @@ type Ctx = {
   setControleur: (c: string) => void;
   setSignature: (sig: string) => void;
   saveDraft: () => Promise<void>;
-  archiveSheet: () => Promise<void>;
-  newSheet: () => void;
+  archiveSheet: () => Promise<Sheet>;
+  newSheet: (kind?: Sheet['kind']) => void;
   loadDraft: () => Promise<void>;
+  // Pré-remplit la fiche RETOUR depuis une fiche DÉPART archivée
+  startReturnFromDepart: (departSheet: Sheet) => void;
   listArchive: () => Promise<Sheet[]>;
   deleteArchived: (id: number) => Promise<void>;
 };
 
 const SheetContext = createContext<Ctx | null>(null);
+
+// Helper : extrait un snapshot minimal d'une fiche DÉPART
+function snapshotFromDepart(s: Sheet): SheetDepartSnapshot {
+  return {
+    id: s.id,
+    date: s.date,
+    matricule: s.matricule,
+    km: s.km,
+    hmot: s.hmot,
+    answers: s.answers,
+  };
+}
 
 export function SheetProvider({ children }: { children: ReactNode }) {
   const [sheet, setSheet] = useState<Sheet>(() => emptySheet());
@@ -103,6 +123,7 @@ export function SheetProvider({ children }: { children: ReactNode }) {
 
   const api = useMemo<Ctx>(() => ({
     sheet,
+    setKind: (k) => setSheet((s) => ({ ...s, kind: k })),
     setIdent: (f, v) => setSheet((s) => ({ ...s, [f]: v } as Sheet)),
     setCompany: (side, field, value) => setSheet((s) => ({
       ...s,
@@ -112,6 +133,13 @@ export function SheetProvider({ children }: { children: ReactNode }) {
       const arr = [...(s.answers[sectionId] || [])];
       arr[idx] = { ...arr[idx], ...patch };
       return { ...s, answers: { ...s.answers, [sectionId]: arr } };
+    }),
+    setCompareVerdict: (sectionId, idx, verdict) => setSheet((s) => {
+      const compare = { ...(s.compare || {}) };
+      const arr = [...(compare[sectionId] || [])];
+      arr[idx] = verdict;
+      compare[sectionId] = arr;
+      return { ...s, compare };
     }),
     addItemPhoto: (sectionId, idx, dataUrl) => setSheet((s) => {
       const arr = [...(s.answers[sectionId] || [])];
@@ -138,19 +166,44 @@ export function SheetProvider({ children }: { children: ReactNode }) {
     setSignature: (sig) => setSheet((s) => ({ ...s, signature: sig })),
     saveDraft: async () => { await writeKey(DRAFT_KEY, JSON.stringify(sheet)); },
     archiveSheet: async () => {
-      const archived: Sheet = { ...sheet, id: Date.now(), savedAt: new Date().toLocaleString('fr-FR') };
+      const archived: Sheet = {
+        ...sheet,
+        id: Date.now(),
+        savedAt: new Date().toLocaleString('fr-FR'),
+        cloudStatus: 'PENDING',
+      };
       const list = await api.listArchive();
       const next = [archived, ...list].slice(0, 30);
       await writeKey(ARCHIVE_KEY, JSON.stringify(next));
+      return archived;
     },
-    newSheet: () => {
-      const fresh = emptySheet();
+    newSheet: (kind = 'DEPART') => {
+      const fresh = emptySheet(kind);
       setSheet(fresh);
       writeKey(DRAFT_KEY, JSON.stringify(fresh));
     },
     loadDraft: async () => {
       const raw = await readKey(DRAFT_KEY);
       if (raw) { try { setSheet(JSON.parse(raw)); } catch {} }
+    },
+    startReturnFromDepart: (depart) => {
+      const fresh = emptySheet('RETOUR');
+      // Hérite des coordonnées, identification camion, contrat
+      fresh.sender = { ...depart.sender };
+      fresh.receiver = { ...depart.receiver };
+      fresh.matricule = depart.matricule;
+      fresh.parc = depart.parc;
+      fresh.chauffeur = depart.chauffeur;
+      fresh.contractId = depart.contractId;
+      fresh.relatedSheetId = depart.id;
+      fresh.departSnapshot = snapshotFromDepart(depart);
+      // Initialise compare vide pour chaque item de chaque section
+      fresh.compare = {};
+      for (const sec of SECTIONS) {
+        fresh.compare[sec.id] = sec.items.map(() => '');
+      }
+      setSheet(fresh);
+      writeKey(DRAFT_KEY, JSON.stringify(fresh));
     },
     listArchive: async () => {
       const raw = await readKey(ARCHIVE_KEY);

@@ -1,11 +1,11 @@
 // Barre d'en-tête commune à toutes les vues, avec :
 // - logo FleetLink (clique = retour accueil)
-// - lien vers la plateforme web fleetlink.mine2port.eu (ouvre en navigateur externe)
+// - lien vers la plateforme web fleetlink.mine2port.fr (ouvre en navigateur externe)
 
 import { useNavigate } from 'react-router-dom';
 
 // URL de la plateforme principale FleetLink (peut être surchargée par variable d'env si besoin).
-export const FLEETLINK_WEB_URL = 'https://fleetlink.mine2port.eu';
+export const FLEETLINK_WEB_URL = 'https://fleetlink.mine2port.fr';
 
 export function AppBar({ subtitle }: { subtitle?: string }) {
   const nav = useNavigate();
