@@ -1,13 +1,16 @@
 // Router applicatif FleetLink (HashRouter pour fonctionner dans la WebView Android sans serveur).
-// Ajout par rapport à l'original Mine2Port :
-//   - Route /login (couche cloud, non bloquante)
-//   - Installation de l'auto-sync (sync-queue) au démarrage
+// Lot 122 : ajout des 4 nouveaux écrans agent terrain (EDL List / Carte Pro / Planning / Compte)
+// + bottom-nav 5 onglets sur tous les écrans principaux
 
 import { useEffect } from 'react';
 import { HashRouter, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { SheetProvider } from './lib/store';
 import { SECTIONS } from './data/sections';
 import { HomeScreen } from './screens/HomeScreen';
+import { EDLListScreen } from './screens/EDLListScreen';
+import { ProCardScreen } from './screens/ProCardScreen';
+import { PlanningScreen } from './screens/PlanningScreen';
+import { AccountScreen } from './screens/AccountScreen';
 import { IdentificationScreen } from './screens/IdentificationScreen';
 import { PhotosScreen } from './screens/PhotosScreen';
 import { BilanScreen } from './screens/BilanScreen';
@@ -29,8 +32,17 @@ export default function App() {
     <SheetProvider>
       <HashRouter>
         <Routes>
+          {/* Navigation principale (bottom-nav 5 onglets) */}
           <Route path="/" element={<HomeScreen />} />
+          <Route path="/edl-list" element={<EDLListScreen />} />
+          <Route path="/planning" element={<PlanningScreen />} />
+          <Route path="/carte" element={<ProCardScreen />} />
+          <Route path="/compte" element={<AccountScreen />} />
+
+          {/* Auth */}
           <Route path="/login" element={<LoginRoute />} />
+
+          {/* Wizard EDL DÉPART/RETOUR */}
           <Route path="/identification" element={<IdentificationScreen />} />
           {SECTIONS.map((sec) => (
             <Route key={sec.id} path={`/${sec.id}`} element={<SectionScreen section={sec} />} />
@@ -38,6 +50,7 @@ export default function App() {
           <Route path="/photos" element={<PhotosScreen />} />
           <Route path="/bilan" element={<BilanScreen />} />
           <Route path="/recap" element={<RecapScreen />} />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>

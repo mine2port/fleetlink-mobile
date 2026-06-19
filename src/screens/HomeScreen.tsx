@@ -1,25 +1,23 @@
-// Écran d'accueil FleetLink :
-// - hero FleetLink (lien vers la plateforme web fleetlink.mine2port.fr)
-// - 2 onglets : EDL À FAIRE (DÉPART/RETOUR à démarrer) | TERMINÉS (archive)
-// - démarrer un EDL DÉPART, ou démarrer un EDL RETOUR depuis un DÉPART archivé
-// - compteur de sync (file d'attente cloud)
+// Écran 1 — Accueil agent (fidèle maquette agent-terrain-fleetlink.html § 1)
+// Header success vert pétrole + avatar + notifs + offline banner
+// 2 stats (EDL aujourd'hui / À faire maintenant)
+// Card "Prochain EDL" CTA + List EDL aujourd'hui + Récents
+// Bottom nav 5 onglets
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppBar, FLEETLINK_WEB_URL } from '../components/AppBar';
+import { AppHeader } from '../components/AppHeader';
+import { BottomNav } from '../components/BottomNav';
 import { useSheet } from '../lib/store';
 import type { Sheet } from '../lib/types';
-import { buildPdf } from '../lib/pdf';
-import { sharePdf } from '../lib/share';
 import { Toast, useToast } from '../components/Toast';
-import { getPendingCount, flushQueue } from '../lib/sync-queue';
-import { isLoggedIn, logout, getCurrentUser, type ApiUser } from '../lib/api';
+import { getPendingCount } from '../lib/sync-queue';
+import { isLoggedIn, getCurrentUser, type ApiUser } from '../lib/api';
 
 export function HomeScreen() {
   const nav = useNavigate();
-  const { sheet, newSheet, listArchive, deleteArchived, startReturnFromDepart } = useSheet();
+  const { sheet, newSheet, listArchive } = useSheet();
   const [archive, setArchive] = useState<Sheet[]>([]);
-  const [tab, setTab] = useState<'todo' | 'done'>('todo');
   const [pending, setPending] = useState(0);
   const [user, setUser] = useState<ApiUser | null>(null);
   const [authed, setAuthed] = useState(false);
@@ -34,6 +32,8 @@ export function HomeScreen() {
   useEffect(() => { refresh(); }, []);
 
   const hasDraft = !!(sheet.matricule || sheet.chauffeur || sheet.bilan);
+  const userInitial = (user?.fullName || 'M').charAt(0).toUpperCase();
+  const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const startNewDepart = () => {
     if (hasDraft) {
@@ -43,193 +43,146 @@ export function HomeScreen() {
     nav('/identification');
   };
 
-  const startReturnFor = (departSheet: Sheet) => {
-    if (hasDraft) {
-      if (!window.confirm("Un brouillon existe déjà. Démarrer l'EDL RETOUR pour ce camion ?")) return;
-    }
-    startReturnFromDepart(departSheet);
-    push(`EDL RETOUR démarré · matricule ${departSheet.matricule || '?'}`);
-    nav('/identification');
-  };
-
-  const resume = () => nav('/identification');
-
-  const removeSheet = async (id: number) => {
-    if (!window.confirm('Supprimer cette fiche archivée ?')) return;
-    await deleteArchived(id);
-    await refresh();
-    push('Fiche supprimée');
-  };
-
-  const resend = async (s: Sheet) => {
-    try {
-      const { blob, filename, dataUrl } = await buildPdf(s);
-      await sharePdf(blob, filename, dataUrl);
-    } catch (e) {
-      console.error(e);
-      push('⛔ Erreur lors du partage');
-    }
-  };
-
-  const trySync = async () => {
-    if (!authed) { push('Connecte-toi pour synchroniser'); return; }
-    if (!navigator.onLine) { push('📴 Hors-ligne — réessaie quand connecté'); return; }
-    push('☁️ Synchronisation…');
-    const { sent, failed } = await flushQueue();
-    push(`☁️ ${sent} envoyée(s), ${failed} échec(s)`);
-    await refresh();
-  };
-
-  const doLogout = async () => {
-    if (!window.confirm('Se déconnecter ? (les fiches locales restent sur l\'appareil)')) return;
-    await logout();
-    await refresh();
-    push('Déconnecté');
-  };
-
-  const openPlatform = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    window.open(FLEETLINK_WEB_URL, '_system');
-  };
-
-  // EDL DÉPART terminés (= candidats à un RETOUR)
-  const departsDone = archive.filter((s) => s.kind === 'DEPART');
+  // Filtres : DÉPARTS en attente (= ceux à compléter) + récents (5 derniers tous types)
+  const departsToDo = archive.filter((s) => s.kind === 'DEPART' && !s.bilan);
+  const todayCount = departsToDo.length + (hasDraft ? 1 : 0);
+  const recents = archive.slice(0, 3);
 
   return (
-    <>
-      <AppBar />
-      <main className="screen">
-        <div className="home-hero">
-          <h2>FleetLink Terrain</h2>
-          <p>États des lieux DÉPART & RETOUR — terrain & hors-ligne</p>
-          <a href={FLEETLINK_WEB_URL} className="home-cta-link" onClick={openPlatform}>
-            🌐 Ouvrir fleetlink.mine2port.fr
-          </a>
+    <div className="app-shell">
+      <AppHeader
+        variant="success"
+        avatar={userInitial}
+        title={user?.fullName ? `Bonjour ${user.fullName.split(' ')[0]}` : 'Bonjour Agent'}
+        subtitle={`Agent terrain · ${today}`}
+        icons={
+          <>
+            <span style={{ position: 'relative' }}>
+              🔔
+              {pending > 0 && <span className="badge-mini">{pending}</span>}
+            </span>
+            <span style={{ fontSize: 16 }}>{authed ? '📡' : '📵'}</span>
+          </>
+        }
+      />
+
+      {pending > 0 && (
+        <div className="offline-banner">📵 {pending} action(s) en attente de sync</div>
+      )}
+
+      <main className="app-content2">
+        <div className="m-stat-row">
+          <div className="m-stat feat">
+            <div className="v">{todayCount}</div>
+            <div className="l">EDL aujourd'hui</div>
+          </div>
+          <div className="m-stat accent">
+            <div className="v">{hasDraft ? 1 : 0}</div>
+            <div className="l">À faire maintenant</div>
+          </div>
         </div>
 
-        {/* Bandeau auth + sync */}
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {authed && user ? (
-              <>
-                <b style={{ fontSize: 14 }}>{user.fullName}</b>
-                <div className="mini muted">{user.tenantName || user.email} · {user.role}</div>
-              </>
-            ) : (
-              <>
-                <b style={{ fontSize: 14 }}>Mode local</b>
-                <div className="mini muted">Non connecté — fiches sauvegardées sur le téléphone</div>
-              </>
-            )}
-            {pending > 0 && (
-              <div className="mini" style={{ color: 'var(--orange)', marginTop: 4 }}>
-                ⏳ {pending} fiche(s) en attente de sync
+        {hasDraft ? (
+          <div className="m-card">
+            <div className="m-card-title">⏰ Brouillon en cours <span className="count warn">EN COURS</span></div>
+            <div style={{ background: 'rgba(232,162,60,.08)', borderRadius: 10, padding: 14, border: '1px solid rgba(232,162,60,.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <span className="type-badge" style={{ background: sheet.kind === 'RETOUR' ? 'rgba(184,92,0,.12)' : 'rgba(15,94,94,.12)', color: sheet.kind === 'RETOUR' ? 'var(--orange)' : 'var(--navy)', padding: '3px 8px', borderRadius: 99, fontSize: 9, fontWeight: 700 }}>
+                    {sheet.kind || 'DÉPART'}
+                  </span>
+                  <div style={{ fontWeight: 800, fontSize: 13, marginTop: 4 }}>
+                    {sheet.matricule || 'Sans matricule'}
+                  </div>
+                </div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--orange)', fontSize: 14 }}>
+                  {sheet.date || '—'}
+                </div>
               </div>
-            )}
-          </div>
-          {authed ? (
-            <>
-              <button className="btn secondary" style={{ padding: '8px 12px', fontSize: 13 }} onClick={trySync}>
-                ☁️ Sync {pending > 0 && <span className="sync-badge">{pending}</span>}
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                <div>📋 Contrat : <strong>{sheet.contractId || '—'}</strong></div>
+                <div>🚚 Camion : <strong>{sheet.matricule || '—'}</strong></div>
+                <div>👤 Chauffeur : <strong>{sheet.chauffeur || '—'}</strong></div>
+              </div>
+              <button className="btn-cta" style={{ marginTop: 12 }} onClick={() => nav('/identification')}>
+                ▶ Reprendre le brouillon
               </button>
-              <button className="btn danger" style={{ padding: '8px 12px', fontSize: 13 }} onClick={doLogout}>↩</button>
-            </>
-          ) : (
-            <button className="btn primary" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => nav('/login')}>
-              Se connecter
+            </div>
+          </div>
+        ) : (
+          <div className="m-card">
+            <div className="m-card-title">🆕 Démarrer un EDL</div>
+            <p className="muted" style={{ fontSize: 12, margin: '6px 0 12px' }}>
+              Le propriétaire remet le camion au locataire. Cet EDL servira de référence au RETOUR.
+            </p>
+            <button className="btn-cta btn-cta-prim" onClick={startNewDepart}>
+              + Nouvel EDL DÉPART
             </button>
+          </div>
+        )}
+
+        <div className="m-card">
+          <div className="m-card-title">
+            📋 EDL aujourd'hui
+            <span className="count">{departsToDo.length}</span>
+          </div>
+          {departsToDo.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px 12px' }}>
+              <span className="ic">✓</span>
+              Aucun EDL en attente
+            </div>
+          ) : (
+            departsToDo.slice(0, 3).map((s) => (
+              <div key={s.id} className="m-edl warn" onClick={() => nav('/identification')} style={{ cursor: 'pointer' }}>
+                <div style={{ flex: 1 }}>
+                  <span className="type-badge depart">DÉPART</span>
+                  <strong>{s.matricule || '(sans matricule)'}</strong>
+                  <span>{s.chauffeur || '—'}</span>
+                </div>
+                <div className="time">{s.date?.slice(5) || ''}</div>
+              </div>
+            ))
           )}
         </div>
 
-        {/* Onglets */}
-        <div className="tabs">
-          <button className={`tab ${tab === 'todo' ? 'active' : ''}`} onClick={() => setTab('todo')}>
-            📋 À faire
-          </button>
-          <button className={`tab ${tab === 'done' ? 'active' : ''}`} onClick={() => setTab('done')}>
-            ✅ Terminés {archive.length > 0 && <span className="muted">({archive.length})</span>}
-          </button>
-        </div>
-
-        {tab === 'todo' && (
-          <>
-            <div className="card">
-              <h3 style={{ margin: 0, color: 'var(--navy)' }}>🆕 Démarrer un EDL DÉPART</h3>
-              <p className="muted" style={{ margin: '6px 0 12px' }}>
-                Le propriétaire remet le camion au locataire. Cet EDL servira de référence au RETOUR.
-              </p>
-              <div className="nav-buttons">
-                <button className="btn primary" onClick={startNewDepart}>+ Nouvel EDL DÉPART</button>
-                {hasDraft && <button className="btn accent" onClick={resume}>Reprendre le brouillon</button>}
-              </div>
+        <div className="m-card">
+          <div className="m-card-title">✅ EDL réalisés récents <span className="count">{recents.length}</span></div>
+          {recents.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px 12px' }}>
+              <span className="ic">📋</span>
+              Aucun EDL terminé pour l'instant
             </div>
-
-            <div className="card">
-              <h3 style={{ margin: 0, color: 'var(--navy)' }}>↩ Faire un EDL RETOUR</h3>
-              <p className="muted" style={{ margin: '6px 0 12px' }}>
-                Choisis l'EDL DÉPART correspondant. Le RETOUR sera pré-rempli (sociétés, camion) et comparé au DÉPART.
-              </p>
-              {!departsDone.length ? (
-                <div className="empty">Aucun EDL DÉPART terminé. Démarre d'abord un EDL DÉPART.</div>
-              ) : departsDone.map((s) => (
-                <div key={s.id} className="saved-item">
-                  <div className="meta">
-                    <b>
-                      {s.matricule || '(sans matricule)'} <span className="badge depart">DÉPART</span>
-                    </b>
-                    <div className="mini">{s.date || ''} · {s.chauffeur || '—'}</div>
-                    <div className="mini">Du {s.savedAt}</div>
-                  </div>
-                  <button className="btn accent" style={{ padding: '8px 12px', fontSize: 14 }} onClick={() => startReturnFor(s)}>
-                    + RETOUR
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {tab === 'done' && (
-          <div className="card">
-            <h3 style={{ margin: 0, color: 'var(--navy)' }}>Fiches archivées</h3>
-            <p className="muted" style={{ margin: '6px 0 12px' }}>
-              Les fiches terminées sont conservées sur ce téléphone. Tu peux les renvoyer ou les pousser au cloud.
-            </p>
-            {!archive.length ? (
-              <div className="empty">Aucune fiche enregistrée pour l'instant.</div>
-            ) : archive.map((s) => {
-              const bilColor = s.bilan === 'APTE AU SERVICE' ? 'var(--good)' : s.bilan === 'IMMOBILISÉ' ? 'var(--bad)' : s.bilan ? 'var(--warn)' : 'var(--muted)';
-              const np = (s.galleryPhotos || []).reduce((a, b) => a + b.length, 0)
-                + Object.values(s.answers || {}).reduce((a, arr) => a + arr.reduce((c, x) => c + x.photos.length, 0), 0);
-              const kind = s.kind || 'DEPART';
+          ) : (
+            recents.map((s) => {
+              const verdict = s.bilan === 'APTE AU SERVICE' ? '✓' : s.bilan === 'IMMOBILISÉ' ? '⛔' : s.bilan ? '⚠' : '—';
               return (
-                <div key={s.id} className="saved-item">
-                  <div className="meta">
-                    <b>
-                      {s.matricule || '(sans matricule)'}
-                      {' '}
-                      <span className={`badge ${kind === 'RETOUR' ? 'retour' : 'depart'}`}>{kind}</span>
-                      {' '}
-                      {s.bilan && <span className="badge" style={{ background: bilColor }}>{s.bilan}</span>}
-                      {' '}
-                      {s.cloudStatus === 'SENT' && <span className="badge" style={{ background: 'var(--good)' }}>☁ Sync</span>}
-                      {s.cloudStatus === 'PENDING' && <span className="badge" style={{ background: 'var(--warn)' }}>⏳ Pending</span>}
-                      {s.cloudStatus === 'ERROR' && <span className="badge" style={{ background: 'var(--bad)' }}>⛔ Erreur</span>}
-                    </b>
-                    <div className="mini">{s.date || ''} · {s.chauffeur || '—'} · 📷 {np}</div>
-                    <div className="mini">Enregistré le {s.savedAt}</div>
+                <div key={s.id} className="m-edl muted">
+                  <div style={{ flex: 1 }}>
+                    <span className={`type-badge ${s.kind === 'RETOUR' ? 'return' : 'depart'}`}>{s.kind || 'DÉPART'}</span>
+                    <strong>{s.matricule || '(sans matricule)'}</strong>
+                    <span>{s.date} · {s.bilan || 'En cours'}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn primary" style={{ padding: '8px 12px', fontSize: 14 }} onClick={() => resend(s)}>↗ Partager</button>
-                    <button className="btn danger" style={{ padding: '8px 12px', fontSize: 14 }} onClick={() => removeSheet(s.id)}>✕</button>
-                  </div>
+                  <div className="time">{verdict}</div>
                 </div>
               );
-            })}
+            })
+          )}
+        </div>
+
+        {!authed && (
+          <div className="m-card" style={{ textAlign: 'center', background: 'rgba(15,94,94,.04)' }}>
+            <div style={{ fontSize: 13, marginBottom: 10, color: 'var(--muted)' }}>
+              Mode local — fiches sauvegardées sur le téléphone uniquement
+            </div>
+            <button className="btn-cta btn-cta-out" onClick={() => nav('/login')}>
+              🔐 Se connecter au cloud FleetLink
+            </button>
           </div>
         )}
       </main>
+
+      <BottomNav pendingCount={pending} />
       <Toast msg={msg} />
-    </>
+    </div>
   );
 }
