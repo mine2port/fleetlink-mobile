@@ -56,7 +56,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
     setLoading(true);
     setErr(null);
     try {
-      await magicLogin(acc.email);
+      await magicLogin(acc.id);
       onAuthenticated();
       nav('/', { replace: true });
     } catch (e: any) {

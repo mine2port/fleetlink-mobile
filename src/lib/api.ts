@@ -34,6 +34,7 @@ export type LoginResponse = {
 };
 
 export type DevAccount = {
+  id: string;               // userId côté serveur (requis par /dev/magic-login)
   email: string;
   role: ApiUser['role'];
   fullName: string;
@@ -150,11 +151,12 @@ export async function listDevAccounts(): Promise<DevAccount[]> {
 }
 
 // MODE TEST : magic-login pour un compte de démo (pas de mot de passe)
-export async function magicLogin(email: string): Promise<LoginResponse> {
+// Le backend /dev/magic-login attend { userId } (et non email) — sinon 400.
+export async function magicLogin(userId: string): Promise<LoginResponse> {
   const r = await fetch(`${API_BASE}/dev/magic-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ userId }),
   });
   if (!r.ok) throw new Error(`Magic-login échoué (${r.status})`);
   const data = (await r.json()) as LoginResponse;
