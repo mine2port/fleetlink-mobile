@@ -19,7 +19,7 @@ export type ApiUser = {
   id: string;
   email: string;
   fullName: string;
-  role: 'SUPER_ADMIN' | 'ADMIN_TENANT' | 'FLEET_MANAGER' | 'FIELD_AGENT';
+  role: 'SUPER_ADMIN' | 'SUPER_ADMIN_FLEETLINK' | 'ADMIN_TENANT' | 'FLEET_MANAGER' | 'FIELD_AGENT';
   tenantId?: string;
   tenantName?: string;
 };
@@ -133,12 +133,16 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return data;
 }
 
-// MODE TEST : récupère la liste des comptes de démo (endpoint /dev/accounts à exposer côté API)
+// MODE TEST : récupère la liste des comptes de démo (endpoint /dev/accounts).
+// Tolère les 2 formats de réponse : array direct OU { items: [...] }.
 export async function listDevAccounts(): Promise<DevAccount[]> {
   try {
     const r = await fetch(`${API_BASE}/dev/accounts`);
     if (!r.ok) return [];
-    return (await r.json()) as DevAccount[];
+    const data = await r.json();
+    if (Array.isArray(data)) return data as DevAccount[];
+    if (data && Array.isArray((data as any).items)) return (data as any).items as DevAccount[];
+    return [];
   } catch { return []; }
 }
 
@@ -158,10 +162,32 @@ export async function magicLogin(email: string): Promise<LoginResponse> {
 }
 
 // Récupère les EDL assignés à l'agent connecté.
+// Note Lot 126 : tant que le Slice S6 EDL backend n'est pas livré
+// (POST /me/edl/start, GET /me/sheets/assigned, etc.), cette route
+// renvoie 404 — on retourne alors un array vide pour ne pas casser
+// l'UI (fallback honnête, l'agent travaille en local + sync-queue).
 export async function fetchAssignedSheets(): Promise<AssignedSheet[]> {
   const r = await authFetch('/me/sheets/assigned');
+  if (r.status === 404) return [];                  // backend S6 non livré
   if (!r.ok) throw new Error(`fetchAssignedSheets ${r.status}`);
-  return (await r.json()) as AssignedSheet[];
+  const data = await r.json();
+  if (Array.isArray(data)) return data as AssignedSheet[];
+  if (data && Array.isArray((data as any).items)) return (data as any).items as AssignedSheet[];
+  return [];
+}
+
+// Statut côté serveur de l'API EDL — utilisé par l'UI pour afficher
+// un bandeau pédagogique "API EDL en cours de livraison" tant que S6 absent.
+export type EdlServerStatus = 'AVAILABLE' | 'NOT_LIVED' | 'UNREACHABLE' | 'UNAUTHENTICATED';
+export async function probeEdlBackend(): Promise<EdlServerStatus> {
+  if (!(await isLoggedIn())) return 'UNAUTHENTICATED';
+  try {
+    const r = await authFetch('/me/sheets/assigned');
+    if (r.status === 404) return 'NOT_LIVED';
+    if (r.status === 401 || r.status === 403) return 'UNAUTHENTICATED';
+    if (r.ok) return 'AVAILABLE';
+    return 'UNREACHABLE';
+  } catch { return 'UNREACHABLE'; }
 }
 
 // Upload d'une fiche complétée + PDF.

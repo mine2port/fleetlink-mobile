@@ -11,6 +11,7 @@ import { login, listDevAccounts, magicLogin, type DevAccount } from '../lib/api'
 
 const ROLE_LABEL: Record<DevAccount['role'], string> = {
   SUPER_ADMIN: 'Super admin FleetLink',
+  SUPER_ADMIN_FLEETLINK: 'Super admin FleetLink',
   ADMIN_TENANT: 'Admin société',
   FLEET_MANAGER: 'Gestionnaire flotte',
   FIELD_AGENT: 'Agent terrain',

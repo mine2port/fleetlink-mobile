@@ -11,7 +11,7 @@ import { useSheet } from '../lib/store';
 import type { Sheet } from '../lib/types';
 import { Toast, useToast } from '../components/Toast';
 import { getPendingCount, flushQueue } from '../lib/sync-queue';
-import { isLoggedIn } from '../lib/api';
+import { isLoggedIn, probeEdlBackend, type EdlServerStatus } from '../lib/api';
 
 type TabKey = 'todo' | 'inprogress' | 'done' | 'sync';
 
@@ -22,12 +22,15 @@ export function EDLListScreen() {
   const [pending, setPending] = useState(0);
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<TabKey>('todo');
+  const [edlServer, setEdlServer] = useState<EdlServerStatus>('UNAUTHENTICATED');
   const { msg, push } = useToast();
 
   const refresh = async () => {
     setArchive(await listArchive());
     setPending(await getPendingCount());
-    setAuthed(await isLoggedIn());
+    const logged = await isLoggedIn();
+    setAuthed(logged);
+    if (logged) setEdlServer(await probeEdlBackend());
   };
   useEffect(() => { refresh(); }, []);
 
@@ -91,6 +94,18 @@ export function EDLListScreen() {
       </div>
 
       <main className="app-content2">
+        {authed && edlServer === 'NOT_LIVED' && (
+          <div className="m-card" style={{ background: 'rgba(232,162,60,.08)', border: '1px solid rgba(232,162,60,.3)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange)', marginBottom: 4 }}>
+              ⚙️ API EDL en cours de livraison côté serveur
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Les EDL assignés depuis le bureau ne sont pas encore récupérables. Tu peux quand même
+              créer un EDL DÉPART/RETOUR en local — il sera envoyé automatiquement dès que
+              la synchronisation sera disponible (file en attente : {pending}).
+            </div>
+          </div>
+        )}
         {tab === 'todo' && (
           <>
             <div className="m-card">
