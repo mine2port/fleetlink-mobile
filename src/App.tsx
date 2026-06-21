@@ -11,6 +11,7 @@ import { EDLListScreen } from './screens/EDLListScreen';
 import { ProCardScreen } from './screens/ProCardScreen';
 import { PlanningScreen } from './screens/PlanningScreen';
 import { AccountScreen } from './screens/AccountScreen';
+import { InspectionScreen } from './screens/InspectionScreen';
 import { IdentificationScreen } from './screens/IdentificationScreen';
 import { PhotosScreen } from './screens/PhotosScreen';
 import { BilanScreen } from './screens/BilanScreen';
@@ -41,6 +42,9 @@ export default function App() {
 
           {/* Auth */}
           <Route path="/login" element={<LoginRoute />} />
+
+          {/* EDL assigné EN LIGNE (Slice S6 — /me/inspections/:id) */}
+          <Route path="/inspection/:id" element={<InspectionScreen />} />
 
           {/* Wizard EDL DÉPART/RETOUR */}
           <Route path="/identification" element={<IdentificationScreen />} />

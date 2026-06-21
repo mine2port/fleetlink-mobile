@@ -11,7 +11,10 @@ import { useSheet } from '../lib/store';
 import type { Sheet } from '../lib/types';
 import { Toast, useToast } from '../components/Toast';
 import { getPendingCount, flushQueue } from '../lib/sync-queue';
-import { isLoggedIn, probeEdlBackend, type EdlServerStatus } from '../lib/api';
+import {
+  isLoggedIn, probeInspectionsBackend, getAssignedInspections,
+  type EdlServerStatus, type AssignedInspection,
+} from '../lib/api';
 
 type TabKey = 'todo' | 'inprogress' | 'done' | 'sync';
 
@@ -23,6 +26,9 @@ export function EDLListScreen() {
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<TabKey>('todo');
   const [edlServer, setEdlServer] = useState<EdlServerStatus>('UNAUTHENTICATED');
+  // EDL assignés depuis le bureau (backend Slice S6 LIVE)
+  const [assigned, setAssigned] = useState<AssignedInspection[]>([]);
+  const [loadingAssigned, setLoadingAssigned] = useState(false);
   const { msg, push } = useToast();
 
   const refresh = async () => {
@@ -30,7 +36,21 @@ export function EDLListScreen() {
     setPending(await getPendingCount());
     const logged = await isLoggedIn();
     setAuthed(logged);
-    if (logged) setEdlServer(await probeEdlBackend());
+    if (logged) {
+      const status = await probeInspectionsBackend();
+      setEdlServer(status);
+      if (status === 'AVAILABLE') {
+        setLoadingAssigned(true);
+        try { setAssigned(await getAssignedInspections()); }
+        catch { setAssigned([]); }
+        finally { setLoadingAssigned(false); }
+      } else {
+        setAssigned([]);
+      }
+    } else {
+      setEdlServer('UNAUTHENTICATED');
+      setAssigned([]);
+    }
   };
   useEffect(() => { refresh(); }, []);
 
@@ -38,10 +58,11 @@ export function EDLListScreen() {
   const departsDone = archive.filter((s) => s.kind === 'DEPART' && s.bilan);
   const done = archive.filter((s) => !!s.bilan);
   const pendingSync = archive.filter((s) => s.cloudStatus === 'PENDING' || s.cloudStatus === 'ERROR');
+  const assignedInProgress = assigned.filter((a) => a.status === 'IN_PROGRESS');
 
   const counts: Record<TabKey, number> = {
-    todo: departsDone.length,
-    inprogress: hasDraft ? 1 : 0,
+    todo: assigned.filter((a) => a.status === 'SCHEDULED').length + departsDone.length,
+    inprogress: assignedInProgress.length + (hasDraft ? 1 : 0),
     done: done.length,
     sync: pendingSync.length,
   };
@@ -94,22 +115,66 @@ export function EDLListScreen() {
       </div>
 
       <main className="app-content2">
-        {authed && edlServer === 'NOT_LIVED' && (
-          <div className="m-card" style={{ background: 'rgba(232,162,60,.08)', border: '1px solid rgba(232,162,60,.3)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange)', marginBottom: 4 }}>
-              ⚙️ API EDL en cours de livraison côté serveur
+        {authed && edlServer === 'AVAILABLE' && (
+          <div className="m-card" style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.3)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--good)', marginBottom: 4 }}>
+              ☁️ EDL connectés au cloud FleetLink
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-              Les EDL assignés depuis le bureau ne sont pas encore récupérables. Tu peux quand même
-              créer un EDL DÉPART/RETOUR en local — il sera envoyé automatiquement dès que
-              la synchronisation sera disponible (file en attente : {pending}).
+              Les EDL assignés depuis le bureau apparaissent ci-dessous (données réelles). Touche un EDL
+              pour le compléter en ligne. Tu peux aussi créer un EDL local hors-ligne à tout moment.
+            </div>
+          </div>
+        )}
+        {authed && (edlServer === 'NOT_LIVED' || edlServer === 'UNREACHABLE') && (
+          <div className="m-card" style={{ background: 'rgba(232,162,60,.08)', border: '1px solid rgba(232,162,60,.3)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange)', marginBottom: 4 }}>
+              {edlServer === 'UNREACHABLE' ? '📴 Serveur EDL injoignable (hors-ligne ?)' : '⚙️ API EDL indisponible côté serveur'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Les EDL assignés ne sont pas récupérables pour l'instant. Tu peux quand même créer un EDL
+              DÉPART/RETOUR en local — il sera envoyé dès le retour de connexion (file en attente : {pending}).
             </div>
           </div>
         )}
         {tab === 'todo' && (
           <>
+            {/* EDL assignés depuis le bureau (RÉEL — backend Slice S6) */}
             <div className="m-card">
-              <div className="m-card-title">↩ EDL RETOUR à faire <span className="count">{departsDone.length}</span></div>
+              <div className="m-card-title">
+                ☁️ EDL assignés à faire <span className="count">{assigned.filter((a) => a.status === 'SCHEDULED').length}</span>
+              </div>
+              {loadingAssigned ? (
+                <div className="empty-state"><span className="ic">⏳</span>Chargement des EDL assignés…</div>
+              ) : assigned.filter((a) => a.status === 'SCHEDULED').length === 0 ? (
+                <div className="empty-state" style={{ padding: '20px 12px' }}>
+                  <span className="ic">📭</span>
+                  {edlServer === 'AVAILABLE' ? 'Aucun EDL assigné en attente.' : 'Connecte-toi pour voir tes EDL assignés.'}
+                </div>
+              ) : (
+                assigned.filter((a) => a.status === 'SCHEDULED').map((a) => (
+                  <div key={a.id} className="m-edl" onClick={() => nav(`/inspection/${a.id}`)}
+                    style={{ background: '#fff', padding: 14, borderRadius: 12, marginBottom: 10, cursor: 'pointer' }}>
+                    <div style={{ flex: 1 }}>
+                      <span className={`type-badge ${a.type === 'RETOUR' ? 'return' : 'depart'}`}>{a.type}</span>
+                      <strong style={{ fontSize: 14, marginTop: 4 }}>{a.truck?.registrationNumber || '(camion ?)'}</strong>
+                      <span>{[a.truck?.brand, a.truck?.model].filter(Boolean).join(' ') || '—'}</span>
+                      {a.contract?.reference && <div style={{ fontSize: 11, marginTop: 4 }}>🔗 {a.contract.reference}</div>}
+                      {a.contract?.renterCompanyName && <div style={{ fontSize: 11 }}>🏢 {a.contract.renterCompanyName}</div>}
+                      {a.scheduledAt && <div style={{ fontSize: 11 }}>📅 {new Date(a.scheduledAt).toLocaleDateString('fr-FR')}</div>}
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); nav(`/inspection/${a.id}`); }}
+                      style={{ background: 'var(--good)', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, fontSize: 10, fontWeight: 700, alignSelf: 'center' }}>
+                      DÉMARRER
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* EDL RETOUR locaux à faire (offline) */}
+            <div className="m-card">
+              <div className="m-card-title">↩ EDL RETOUR local à faire <span className="count">{departsDone.length}</span></div>
               {departsDone.length === 0 ? (
                 <div className="empty-state">
                   <span className="ic">📋</span>
@@ -140,18 +205,39 @@ export function EDLListScreen() {
         )}
 
         {tab === 'inprogress' && (
-          hasDraft ? (
-            <div className="m-edl error" style={{ background: '#fff', padding: 14, borderRadius: 12 }}>
-              <div style={{ flex: 1 }}>
-                <span className={`type-badge ${sheet.kind === 'RETOUR' ? 'return' : 'depart'}`}>{sheet.kind || 'DÉPART'} · BROUILLON</span>
-                <strong style={{ fontSize: 14, marginTop: 4 }}>{sheet.matricule || '(sans matricule)'}</strong>
-                <span>{sheet.chauffeur || '—'}</span>
-                <div style={{ marginTop: 6, fontSize: 11 }}>📅 {sheet.date}</div>
-              </div>
-              <button onClick={() => nav('/identification')} style={{ background: 'var(--good)', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, fontSize: 10, fontWeight: 700, alignSelf: 'center' }}>
-                REPRENDRE
-              </button>
-            </div>
+          (hasDraft || assignedInProgress.length > 0) ? (
+            <>
+              {/* EDL assignés EN COURS (RÉEL — backend) */}
+              {assignedInProgress.map((a) => (
+                <div key={a.id} className="m-edl" onClick={() => nav(`/inspection/${a.id}`)}
+                  style={{ background: '#fff', padding: 14, borderRadius: 12, marginBottom: 10, cursor: 'pointer', borderLeft: '3px solid var(--good)' }}>
+                  <div style={{ flex: 1 }}>
+                    <span className={`type-badge ${a.type === 'RETOUR' ? 'return' : 'depart'}`}>{a.type} · EN COURS ☁️</span>
+                    <strong style={{ fontSize: 14, marginTop: 4 }}>{a.truck?.registrationNumber || '(camion ?)'}</strong>
+                    <span>{a.contract?.renterCompanyName || [a.truck?.brand, a.truck?.model].filter(Boolean).join(' ') || '—'}</span>
+                    {a.contract?.reference && <div style={{ marginTop: 6, fontSize: 11 }}>🔗 {a.contract.reference}</div>}
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); nav(`/inspection/${a.id}`); }}
+                    style={{ background: 'var(--good)', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, fontSize: 10, fontWeight: 700, alignSelf: 'center' }}>
+                    REPRENDRE
+                  </button>
+                </div>
+              ))}
+              {/* Brouillon local (offline) */}
+              {hasDraft && (
+                <div className="m-edl error" style={{ background: '#fff', padding: 14, borderRadius: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <span className={`type-badge ${sheet.kind === 'RETOUR' ? 'return' : 'depart'}`}>{sheet.kind || 'DÉPART'} · BROUILLON LOCAL</span>
+                    <strong style={{ fontSize: 14, marginTop: 4 }}>{sheet.matricule || '(sans matricule)'}</strong>
+                    <span>{sheet.chauffeur || '—'}</span>
+                    <div style={{ marginTop: 6, fontSize: 11 }}>📅 {sheet.date}</div>
+                  </div>
+                  <button onClick={() => nav('/identification')} style={{ background: 'var(--good)', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, fontSize: 10, fontWeight: 700, alignSelf: 'center' }}>
+                    REPRENDRE
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="empty-state">
               <span className="ic">⏸</span>

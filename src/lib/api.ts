@@ -195,6 +195,220 @@ export async function probeEdlBackend(): Promise<EdlServerStatus> {
   } catch { return 'UNREACHABLE'; }
 }
 
+// ============================================================
+// Client Inspections RÉEL (Slice S6 EDL — backend LIVE).
+// Endpoints /me/inspections/* — l'agent FIELD_AGENT est autorisé,
+// le JWT est déjà géré par authFetch (login + refresh).
+// Ces fonctions remplacent à terme l'ancien fetchAssignedSheets/
+// uploadSheet basés sur /me/sheets (conservés plus bas pour compat).
+// ============================================================
+
+export type InspectionType = 'DEPART' | 'RETOUR';
+export type InspectionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type InspectionVerdict = 'APTE' | 'RESERVES' | 'IMMOBILISE';
+
+export type InspectionTruckRef = {
+  registrationNumber?: string;
+  brand?: string;
+  model?: string;
+};
+export type InspectionContractRef = {
+  reference?: string;
+  renterCompanyName?: string;
+};
+
+// Élément de liste (GET /me/inspections/assigned)
+export type AssignedInspection = {
+  id: string;
+  type: InspectionType;
+  status: InspectionStatus;
+  scheduledAt?: string;       // ISO
+  truck?: InspectionTruckRef;
+  contract?: InspectionContractRef;
+  assignedAgent?: { id?: string; fullName?: string } | string;
+};
+
+// Item de checklist côté serveur (souple : on n'impose pas un schéma rigide).
+export type InspectionChecklistItem = {
+  sectionId?: string;
+  itemId?: string;
+  label?: string;
+  state?: string;
+  observation?: string;
+  [k: string]: unknown;
+};
+
+// Photo référencée côté serveur (GET /me/inspections/:id/photos)
+export type InspectionPhoto = {
+  slot: string;
+  label?: string;
+  url?: string;
+  objectKey?: string;
+};
+
+export type InspectionDamage = {
+  label?: string;
+  description?: string;
+  severity?: string;
+  estimatedCost?: number;
+  [k: string]: unknown;
+};
+
+// Détail complet (GET /me/inspections/:id)
+export type InspectionDetail = AssignedInspection & {
+  mileageKm?: number | null;
+  fuelLevel?: number | null;
+  verdict?: InspectionVerdict | null;
+  checklist?: InspectionChecklistItem[] | Record<string, unknown> | null;
+  photos?: InspectionPhoto[] | null;
+  damages?: InspectionDamage[] | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
+  completedAt?: string | null;
+};
+
+export type InspectionProgressPayload = {
+  mileageKm?: number;
+  fuelLevel?: number;
+  checklist?: InspectionChecklistItem[] | Record<string, unknown>;
+  photos?: InspectionPhoto[];
+  locationLat?: number;
+  locationLng?: number;
+};
+
+export type InspectionCompletePayload = {
+  verdict: InspectionVerdict;
+  damages?: InspectionDamage[];
+  agentSignatureBase64?: string;
+  counterSignatureBase64?: string;
+  mileageKm?: number;
+  fuelLevel?: number;
+};
+
+function asArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && Array.isArray((data as any).items)) return (data as any).items as T[];
+  return [];
+}
+
+// Liste des EDL assignés à l'agent connecté (SCHEDULED | IN_PROGRESS).
+export async function getAssignedInspections(): Promise<AssignedInspection[]> {
+  const r = await authFetch('/me/inspections/assigned');
+  if (!r.ok) throw new Error(`getAssignedInspections ${r.status}`);
+  return asArray<AssignedInspection>(await r.json());
+}
+
+// Détail d'une inspection.
+export async function getInspection(id: string): Promise<InspectionDetail> {
+  const r = await authFetch(`/me/inspections/${id}`);
+  if (!r.ok) throw new Error(`getInspection ${r.status}`);
+  return (await r.json()) as InspectionDetail;
+}
+
+// Démarre l'inspection : SCHEDULED -> IN_PROGRESS.
+export async function startInspection(id: string): Promise<InspectionDetail> {
+  const r = await authFetch(`/me/inspections/${id}/start`, { method: 'POST' });
+  if (!r.ok) throw new Error(`startInspection ${r.status}`);
+  return (await r.json()) as InspectionDetail;
+}
+
+// Sauvegarde partielle (km, carburant, checklist, photos, GPS).
+export async function progressInspection(
+  id: string,
+  payload: InspectionProgressPayload,
+): Promise<InspectionDetail> {
+  const r = await authFetch(`/me/inspections/${id}/progress`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`progressInspection ${r.status}`);
+  return (await r.json()) as InspectionDetail;
+}
+
+// Demande une URL présignée pour téléverser une photo dans un slot donné.
+export async function presignInspectionPhoto(
+  id: string,
+  body: { slot: string; fileName: string },
+): Promise<{ url: string; objectKey: string }> {
+  const r = await authFetch(`/me/inspections/${id}/photos/presign-upload`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`presignInspectionPhoto ${r.status}`);
+  return (await r.json()) as { url: string; objectKey: string };
+}
+
+// Téléverse un blob directement vers MinIO via l'URL présignée (PUT direct, hors API).
+export async function putToPresignedUrl(url: string, blob: Blob, contentType = 'image/jpeg'): Promise<void> {
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: blob,
+  });
+  if (!r.ok) throw new Error(`putToPresignedUrl ${r.status}`);
+}
+
+// Helper : convertit un dataURL (jpeg/png) en Blob pour le PUT MinIO.
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const [head, b64] = dataUrl.split(',');
+  const mime = /data:(.*?);base64/.exec(head)?.[1] || 'image/jpeg';
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// Upload complet d'une photo : presign -> PUT -> renvoie le descriptor à passer à progress/complete.
+export async function uploadInspectionPhoto(
+  id: string,
+  slot: string,
+  dataUrl: string,
+): Promise<InspectionPhoto> {
+  const blob = dataUrlToBlob(dataUrl);
+  const ext = blob.type.includes('png') ? 'png' : 'jpg';
+  const fileName = `${slot}-${Date.now()}.${ext}`;
+  const { url, objectKey } = await presignInspectionPhoto(id, { slot, fileName });
+  await putToPresignedUrl(url, blob, blob.type);
+  return { slot, objectKey };
+}
+
+// Liste des photos déjà téléversées (avec URLs de lecture).
+export async function getInspectionPhotos(id: string): Promise<InspectionPhoto[]> {
+  const r = await authFetch(`/me/inspections/${id}/photos`);
+  if (!r.ok) throw new Error(`getInspectionPhotos ${r.status}`);
+  return asArray<InspectionPhoto>(await r.json());
+}
+
+// Clôture : COMPLETED avec verdict + dommages + signatures.
+export async function completeInspection(
+  id: string,
+  payload: InspectionCompletePayload,
+): Promise<InspectionDetail> {
+  const r = await authFetch(`/me/inspections/${id}/complete`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`completeInspection ${r.status}`);
+  return (await r.json()) as InspectionDetail;
+}
+
+// Sonde le backend Inspections (S6) — remplace probeEdlBackend pour l'UI.
+export async function probeInspectionsBackend(): Promise<EdlServerStatus> {
+  if (!(await isLoggedIn())) return 'UNAUTHENTICATED';
+  try {
+    const r = await authFetch('/me/inspections/assigned');
+    if (r.status === 404) return 'NOT_LIVED';
+    if (r.status === 401 || r.status === 403) return 'UNAUTHENTICATED';
+    if (r.ok) return 'AVAILABLE';
+    return 'UNREACHABLE';
+  } catch { return 'UNREACHABLE'; }
+}
+
+// ============================================================
+// LEGACY (compat) — ancienne couche /me/sheets, conservée pour
+// l'archive locale + sync-queue offline. NE PAS supprimer.
+// ============================================================
+
 // Upload d'une fiche complétée + PDF.
 export async function uploadSheet(sheet: Sheet, pdfBlob: Blob): Promise<{ id: string; pdfUrl: string }> {
   const fd = new FormData();
